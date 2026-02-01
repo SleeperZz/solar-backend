@@ -1,0 +1,254 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- 1. User & Role Management ---
+enum Role {
+  ADMIN
+  SYSTEM_OWNER
+  SERVICE_TEAM
+  CLEANING_TEAM
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  username  String   @unique
+  password  String
+  email     String?  @unique
+  role      Role     @default(SYSTEM_OWNER)
+  firstName String
+  lastName  String
+  phone     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ownedSites   Site[] @relation("SiteOwner")
+  assignedJobs Job[]  @relation("AssignedJobs")
+  createdJobs  Job[]  @relation("CreatedJobs")
+}
+
+model Site {
+  id          Int     @id @default(autoincrement())
+  name        String
+  address     String?
+  latitude    Float?
+  longitude   Float?
+  capacityKWp Float
+  plantCode   String  @unique
+
+  ownerId Int?
+  owner   User? @relation("SiteOwner", fields: [ownerId], references: [id])
+
+  inverters     Inverter[]
+  jobs          Job[]
+  dailyEnergies SiteDailyEnergy[]
+  alarms        Alarm[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Inverter {
+  id           Int    @id @default(autoincrement())
+  serialNumber String @unique
+  name         String
+  model        String
+
+  siteId Int
+  site   Site @relation(fields: [siteId], references: [id])
+
+  huaweiDevId String? @unique
+  stationCode String?
+
+  activePower     Float     @default(0)
+  lastDailyEnergy Float?
+  status          String?
+  lastSyncAt      DateTime?
+
+  alarms       Alarm[]
+  kpiSnapshots InverterKpiSnapshot[]
+}
+
+model SyncState {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+enum JobType {
+  CLEANING
+  SERVICE
+  INSPECTION
+}
+
+enum JobStatus {
+  DRAFT
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model Job {
+  id     Int       @id @default(autoincrement())
+  jobNo  String    @unique
+  title  String
+  type   JobType
+  status JobStatus @default(DRAFT)
+
+  scheduledDate DateTime?
+  details       String?
+
+  siteId Int
+  site   Site @relation(fields: [siteId], references: [id])
+
+  assignedToId Int?
+  assignedTo   User? @relation("AssignedJobs", fields: [assignedToId], references: [id])
+
+  createdById Int
+  createdBy   User @relation("CreatedJobs", fields: [createdById], references: [id])
+
+  attachments JobAttachment[]
+  stockUsage  StockTransaction[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model JobAttachment {
+  id        Int      @id @default(autoincrement())
+  fileUrl   String
+  fileType  String? // 'BEFORE', 'AFTER', 'REPORT'
+  jobId     Int
+  job       Job      @relation(fields: [jobId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+model Product {
+  id           Int     @id @default(autoincrement())
+  sku          String  @unique
+  name         String
+  category     String?
+  unit         String
+  currentStock Int     @default(0)
+
+  transactions StockTransaction[]
+}
+
+enum TransactionType {
+  IN
+  OUT
+}
+
+model StockTransaction {
+  id        Int             @id @default(autoincrement())
+  type      TransactionType
+  quantity  Int
+  productId Int
+  product   Product         @relation(fields: [productId], references: [id])
+
+  jobId Int?
+  job   Job? @relation(fields: [jobId], references: [id])
+
+  note      String?
+  createdAt DateTime @default(now())
+}
+
+// ---- Monitoring / Analytics ----
+
+model SiteDailyEnergy {
+  id     Int  @id @default(autoincrement())
+  siteId Int
+  site   Site @relation(fields: [siteId], references: [id])
+
+  // วันที่ของข้อมูล (ควร normalize เป็น 00:00:00)
+  date DateTime
+
+  // ผลผลิตไฟฟ้ารายวัน (kWh)
+  yieldKWh Float @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([siteId, date])
+  @@index([date])
+}
+
+model Alarm {
+  id Int @id @default(autoincrement())
+
+  // id ของ alarm จาก Huawei (บางระบบให้เป็น Long/String)
+  huaweiAlarmId String? @unique
+
+  siteId Int?
+  site   Site? @relation(fields: [siteId], references: [id])
+
+  inverterId Int?
+  inverter   Inverter? @relation(fields: [inverterId], references: [id])
+
+  stationCode String?
+  devId       String?
+  sn          String?
+
+  name       String?
+  severity   Int?
+  status     String?
+  occurredAt DateTime?
+  clearedAt  DateTime?
+
+  raw Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([stationCode])
+  @@index([devId])
+  @@index([status])
+  @@index([occurredAt])
+}
+
+// ---- Inverter KPI Snapshots ----
+
+model InverterKpiSnapshot {
+  id         Int      @id @default(autoincrement())
+  inverterId Int
+  inverter   Inverter @relation(fields: [inverterId], references: [id])
+
+  ts          DateTime
+  activePower Float    @default(0)
+  dayEnergy   Float    @default(0)
+  totalEnergy Float?
+  runState    Int?
+  temperature Float?
+  powerFactor Float?
+
+  raw       Json?
+  createdAt DateTime @default(now())
+
+  stringSnapshots InverterStringSnapshot[]
+
+  @@unique([inverterId, ts])
+  @@index([inverterId, ts])
+}
+
+model InverterStringSnapshot {
+  id         Int                 @id @default(autoincrement())
+  snapshotId Int
+  snapshot   InverterKpiSnapshot @relation(fields: [snapshotId], references: [id])
+
+  stringNo Int
+  voltage  Float?
+  current  Float?
+  status   String?
+
+  @@unique([snapshotId, stringNo])
+  @@index([snapshotId])
+}
