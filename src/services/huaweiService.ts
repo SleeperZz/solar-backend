@@ -228,6 +228,29 @@ class HuaweiService {
     const res = await this.client.post('/thirdData/getDevRealKpi', body);
     return res.data;
   }
+
+  // ---------- Endpoint: Station History KPI (optional) ----------
+  // ตามเอกสาร: /thirdData/getKpiStationDay, /thirdData/getKpiStationMonth, /thirdData/getKpiStationYear【:contentReference[oaicite:11]{index=11}】
+  public async getKpiStationDay(params: { stationCodes: string[] | string; collectTime: number }) {
+    await this.ensureLoggedIn();
+    const stationCodesStr = Array.isArray(params.stationCodes) ? params.stationCodes.join(',') : params.stationCodes;
+    const res = await this.client.post('/thirdData/getKpiStationDay', { stationCodes: stationCodesStr, collectTime: params.collectTime });
+    return res.data;
+  }
+
+  public async getKpiStationMonth(params: { stationCodes: string[] | string; collectTime: number }) {
+    await this.ensureLoggedIn();
+    const stationCodesStr = Array.isArray(params.stationCodes) ? params.stationCodes.join(',') : params.stationCodes;
+    const res = await this.client.post('/thirdData/getKpiStationMonth', { stationCodes: stationCodesStr, collectTime: params.collectTime });
+    return res.data;
+  }
+
+  public async getKpiStationYear(params: { stationCodes: string[] | string; collectTime: number }) {
+    await this.ensureLoggedIn();
+    const stationCodesStr = Array.isArray(params.stationCodes) ? params.stationCodes.join(',') : params.stationCodes;
+    const res = await this.client.post('/thirdData/getKpiStationYear', { stationCodes: stationCodesStr, collectTime: params.collectTime });
+    return res.data;
+  }
 }
 
 export const huaweiService = new HuaweiService();

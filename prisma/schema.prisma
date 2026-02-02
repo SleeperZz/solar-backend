@@ -70,7 +70,8 @@ model Inverter {
   activePower     Float     @default(0)
   lastDailyEnergy Float?
   status          String?
-  lastSyncAt      DateTime?
+
+  lastSyncAt    DateTime?  
 
   alarms       Alarm[]
   kpiSnapshots InverterKpiSnapshot[]
